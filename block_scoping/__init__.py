@@ -1,1 +1,1 @@
-from .scoped import scoped, when, loop, condition, block_scopable
+from .scoped import block_scoping, no_block_scoping, block_scope, BlockScopingException

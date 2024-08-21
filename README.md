@@ -1,187 +1,109 @@
 # Block Scoping
 
-Python's lack of block scoping is a common source of bugs.
+This is simple [PyPi package](https://pypi.org/project/block-scoping/) running static analysis to detect scoping issues caused by Python's lack of block scoping.
 
-[This package](https://github.com/l74d/scoping) addresses this problem.
-However, it may not be the best fit for your codebase due to:
+Python's scoping is a common source of bugs.
 
-1. The additional indentation required for `for` loops and `if` statements;
-2. The implementation of [shadowing](https://en.wikipedia.org/wiki/Variable_shadowing), which is not a feature I want enabled by default.
-
-Because Python doesn't have a `var`/`let` keyword, shadowing makes this code unintuitive and difficult to understand, unless you explicitely tell `scoping` to keep `x` after the end of the scope.
+### Example
 
 ```python3
-from scoping import scoping  # shawoding implementation from https://github.com/l74d/scoping
+total = 0
+for item in items:
+    if item > 0:
+        total += item
+    else:
+        skipped = True
+    
+if skipped:
+    print("Some items have been skipped")
+```
+
+The mistake is easy to spot. However, in larger codebases, such issues can be much harder to detect.
+
+
+### Another Example
+
+```python3
+try:
+    x = int(y)
+    f(x)
+except:
+    logging.error(f"error when x = {x}")
+```
+
+The intent is to catch errors raised by `f`, but this could also catch errors raised by `int(y)`, which this `except` is not prepared for.
+
+To avoid these potential bugs, it's safer not to reference any variable in the `except` block that was defined within the `try` block. A simple fix would be:
+
+```python3
 x = None
-with scoping():
-    if x is None:
-        x = 3
-print(x)  # 'None' is printed
+try:
+    x = int(y)
+    f(x)
+except:
+    logging.error(f"error when x = {x}")
 ```
 
-In contrast, my package aims at keeping things intuitive and convenient.
-Below are some examples.
+This package helps you identify these issues before execution, for example by automatically checking your code in your CI/CD script.
 
-## Scoped Loop
+To check your code, install the package and run:
+
+```bash
+./check_block_scoping your_dir/*.py
+```
+
+or
+```
+./check_block_scoping your_dir --exclude notthis.py notthat.py
+```
+
+This will recursively search `your_dir`.
+
+You can opt-out specific functions and classes by decorating them with `@no_block_scoping`.
+
+Alternatively, you can explicitly opt-in with `@block_scoping`, which removes the need to run `./check_block_scoping` altogether, especially if you want to enforce scoping rules more strictly across your organization, or only at specific locations. 
+
+
+## Rules
+
+The package implements the following rules:
+
+| Control Flow      | Scope of variables defined inside block                    |
+|-------------------|------------------------------------------------------------|
+| If/Elif/Else      | block only                                                 |
+| For loop          | block only                                                 |
+| While Loop        | block only                                                 |
+| Walrus assignment | block only if used in an if or a while                     | 
+| `with block_scope()` | block only |
+| Other With statements | variables outlive their block                              |
+| Try/Else/Finally     | Try/Else/Finally: outlive their block but can't be used in Except |
+| Except               | block only                                                 |
+| Case (Python >= 3.10) | block only                                                |
+
+This applies to:
+- all symbols, including function names.
+- all attributes of `self`,
+
+Specifically, you are only allowed to use an attribute of `self` if the attribute is defined in the constructor.
+
+`with` statements do not create block scopes. This is because in 99% of cases, the intent of a `with` statement is for its block to always be executed, unlike if/while/try which are designed for the opposite.
+
+This is why the special object `block_scope` was added.
 
 ```python3
-
-from block_scoping import loop
-
-outside = 0
-for x in loop([1, 2, 3], keep='z'):
-    outside += 1
-    y = 1
-    z = 1
-
-print(x)  # raises error
-print(y)  # raises error
-print(outside)  # prints '3', i.e. no variable shadowing
-print(z)  # prints '1'
+with block_scope():
+    x = 3
+print(x)  # check_block_scoping counts this as an error
 ```
 
-## Standalone IFs
+## Known Issues
 
-Standalone IFs are best handled with a `condition` construct:
+- `./check_block_scoping` is not aware of the variables imported via `from module import *`, potentially raising false positives. The `@block_scoping` decorator doesn't have this issue.
 
-```
-@block_scopable
-def foobar():
-    outside = None
-    with condition(outside is None):
-        outside = 1
-        y = 1
-    print(y)  # raises error
-    print(outside)  # prints '1', i.e. no variable shadowing
-```
+- Except for `self` in classes, `./check_block_scoping` won't detect scoping issues that involve object attributes. 
 
-Unlike other constructs, you will need to annotate the parent function/method with `@block_scopable`.
-It will raise an error if the annotation is missing and the condition is false.
-
-You can specify which variables to keep, as for `loop`:
-
-```
-@block_scopable
-def foobar():
-    outside = None
-    with condition(outside is None, keep='z'):
-        outside = 1
-        y = 1
-        z = 1
-    print(z)  # prints '1'
-```
-
-Alternatively, you can specify the variables to keep with the `keep` method:
-
-```
-@block_scopable
-def foobar():
-    with condition(True) as c:
-        y = 1
-        z = 1
-        c.keep('y', 'z')  # anywhere in the block
-    print(y)  # prints '1'
-    print(z)  # prints '1'
-```
-
-
-## If/Elif/Else
-
-For if/elif/else scenarios, it is recommended to wrap everything into a plain `scoped`:
-
-```python3
-
-from block_scoping import scoped
-
-outside = None
-a = 3
-with scoped(keep='z'):
-    y = 4
-    if a == 1:
-        outside = 1
-        z = 1
-    elif a == 2:
-        outside = 2
-        z = 2
-    else:
-        outside = 3
-        z = 3
-print(y)  # raises error
-print(outside)  # prints '3'
-print(z)  # prints '3'
-```
-
-Or, equivalently:
-```python3
-
-from block_scoping import scoped
-
-outside = None
-a = 3
-with scoped() a s:
-    y = 4
-    if a == 1:
-        outside = 1
-        z = 1
-    elif a == 2:
-        outside = 2
-        z = 2
-    else:
-        outside = 3
-        z = 3
-    s.keep('z')
-print(y)  # raises error
-print(outside)  # prints '3'
-print(z)  # prints '3'
-```
-
-If you really don't like the extra indent, you can also use `when` with the walrus operator:
-
-
-```python3
-
-outside = None
-a = 3
-if s := when(a == 1):
-    outside = 1
-    z = 1
-    s.destroy(keep='z')
-elif s := when(a == 2):
-    outside = 2
-    z = 2
-    s.destroy(keep='z')
-elif s := when(True):
-    outside = 3
-    z = 3
-    s.destroy(keep='z')
-
-print(y)  # raises error
-print(outside)  # prints '3'
-print(z)  # prints '3'
-```
-
-Note that you will have to explicitely destroy the scope with the `destroy` method.
-You will be reminded if you haven't called `destroy` by the time the `scope` is garbage collected.
-
-# External Contribution
+## External Contribution
 
 Contributions are welcomed!
 
 
-```
-if when(a == 1):
-    pass
-
-elif when(a == 2):
-    pass
-
-elif when(True):
-    pass
-
-```
-
-when(a == 1, keep='x'):
-    pass
-    
-if s := when(a == 1):
-    s.keep('x')
