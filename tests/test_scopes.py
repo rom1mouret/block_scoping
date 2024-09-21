@@ -106,16 +106,6 @@ class TestBlockScoping(unittest.TestCase):
                     y = 2
                 print(y)
 
-    def test_if_else(self):
-        with self.assertRaises(BlockScopingException):
-            @block_scoping
-            def f():
-                if True:
-                    x = 1
-                else:
-                    x = 2
-                print(x)
-
     def test_elif(self):
         with self.assertRaises(BlockScopingException):
             @block_scoping
@@ -552,6 +542,150 @@ class TestBlockScoping(unittest.TestCase):
             with suppress(ValueError) as v1, suppress(ValueError) as v2:
                 print(v1, v2)
 
+    def test_regular_self_access(self):
+        @block_scoping
+        class A:
+            def method(self):
+                self.a = "x"
+                print(self.a)
+
+    def test_complex_for(self):
+        @block_scoping
+        def f():
+            for (x, y), z in [((1, 2), 3)]:
+                print(x, y)
+    
+    def test_error_variable(self):
+        @block_scoping
+        def f():
+            try:
+                pass
+            except (ValueError, ZeroDivisionError) as e:
+                print(f"An error occurred: {e}")
+
+    def test_starred_variables1(self):
+        @block_scoping
+        def f(*args, **kwargs):
+            print(args, kwargs)
+
+    def test_starred_variables2(self):
+        with self.assertRaises(BlockScopingException):
+            @block_scoping
+            def f():
+                y = {**x}
+
+    def test_object_method1(self):
+        @block_scoping
+        class A:
+            def __init__(self):
+                self.a = "x"
+                self.a.method()
+
+    def test_object_method2(self):
+        @block_scoping
+        class A:
+            def __init__(self):
+                self.method()
+
+    def test_object_method3(self):
+        @block_scoping
+        def f():
+            return "xxxxx".lower()
+
+    def test_object_method4(self):
+        @block_scoping
+        def f():
+            v = "xxxxx"
+            return v.lower()
+
+    def test_object_method5(self):
+        with self.assertRaises(BlockScopingException):
+            @block_scoping
+            def f():
+                return v.lower()
+
+
+    def test_if_else_scope_inheritance1(self):
+        @block_scoping
+        def f():
+            if True:
+                x = 1
+            else:
+                x = 2
+            print(x)
+
+    def test_if_else_scope_inheritance2(self):
+        @block_scoping
+        def f():
+            if True:
+                x = 1
+            elif False:
+                x = 3
+            else:
+                x = 2
+            print(x)
+
+    def test_if_else_scope_inheritance3(self):
+        with self.assertRaises(BlockScopingException):
+            @block_scoping
+            def f():
+                if True:
+                    x = 1
+                elif False:
+                    x = 3
+                print(x)
+
+    def test_if_else_scope_inheritance_nested1(self):
+        @block_scoping
+        def f():
+            if True:
+                if True:
+                    x = 1
+                else:
+                    x = 2
+            else:
+                if True:
+                    x = 2
+                else:
+                    x = 3
+            print(x)
+
+    def test_if_else_scope_inheritance_nested2(self):
+        with self.assertRaises(BlockScopingException):
+            @block_scoping
+            def f():
+                if True:
+                    if True:
+                        x = 1
+                else:
+                    if True:
+                        x = 2
+                    else:
+                        x = 3
+                print(x)
+
+    def test_if_else_scope_inheritance_nested3(self):
+        with self.assertRaises(BlockScopingException):
+            @block_scoping
+            def f():
+                if True:
+                    if True:
+                        x = 1
+                    else:
+                        x = 2
+                else:
+                    if True:
+                        x = 2
+                print(x)
+
+    def test_allow_underscore_reuse(self):
+        @block_scoping
+        def f():
+            for _ in range(3):
+                for _ in range(5):
+                    pass
+
+    #TODO: test inheritance from match/case
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

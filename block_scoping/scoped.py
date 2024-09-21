@@ -146,7 +146,8 @@ class ScopeChecker(ast.NodeVisitor):
     def visit_Attribute(self, node):
         """ check only attributes of 'self' """
         if self._attr_check:
-            self._check_in_scope(node, f"self.{node.attr}")
+            if isinstance(node.value, ast.Name) and node.value.id == "self":
+                self._check_in_scope(node, f"self.{node.attr}")
 
         self.generic_visit(node)
 
@@ -188,7 +189,18 @@ class ScopeChecker(ast.NodeVisitor):
         # add function to current scope
         self._scopes[-1].add(node.name)
 
-        with self._scope([arg.arg for arg in node.args.args]):
+        # arguments
+        arg_names = [arg.arg for arg in node.args.args]  # Positional arguments
+
+        if node.args.vararg:
+            arg_names.append(node.args.vararg.arg)  # *args
+
+        if node.args.kwarg:
+            arg_names.append(node.args.kwarg.arg)  # **kwargs
+
+        arg_names += [arg.arg for arg in node.args.kwonlyargs]
+
+        with self._scope(arg_names):
             self.generic_visit(node)
             self.last_func_scope = set(self._scopes[-1])  # most notably, this will contain the object attributes for __init__
 
@@ -228,15 +240,12 @@ class ScopeChecker(ast.NodeVisitor):
     def visit_For(self, node):
         target = node.target
         
-        ite = []
-        # the 'ite' in 'for ite1, ite2 in range(10)' 
-        if isinstance(target, ast.Name):
-            ite = [target.id]
-        elif isinstance(target, ast.Tuple):
-            ite = [elt.id for elt in target.elts if isinstance(elt, ast.Name)]
+        ite = _extract_assign_vars(target)
 
         # check that we are not reusing a parent's for loop variables
         for v in ite:
+            if v == "_":
+                continue
             if v in self._for_loop_vars:
                 self._error(
                     target,
@@ -263,12 +272,16 @@ class ScopeChecker(ast.NodeVisitor):
             self.generic_visit(node)
 
     def visit_If(self, node):
+        inherited_scope = []
+
         # the main IF
         walrus_vars = self._walrus_targets(node)
         with self._scope(extra_vars=walrus_vars):
             for stmt in node.body:
                 self.visit(stmt)
+            inherited_scope.append(self._scopes[-1].copy())
 
+        has_else = False
         current_node = node
         while current_node.orelse:
             if isinstance(current_node.orelse[0], ast.If):
@@ -278,19 +291,30 @@ class ScopeChecker(ast.NodeVisitor):
                 with self._scope(extra_vars=walrus_vars):
                     for stmt in ifelse_node.body:
                         self.visit(stmt)
+                    inherited_scope.append(self._scopes[-1].copy())
                 current_node = ifelse_node
             else:
                 # Else block
+                has_else = True
                 with self._scope(extra_vars=walrus_vars):
                     for stmt in current_node.orelse:
                         self.visit(stmt)
+                    inherited_scope.append(self._scopes[-1].copy())
                 break
+
+        if has_else:
+            common_assigned = set.intersection(*inherited_scope)
+            self._scopes[-1].update(common_assigned)
 
     def visit_Try(self, node):
         # 'except' blocks can't use the variables defined in the try and else,
         # and they can't add variables to the main scope
         for handler in node.handlers:
-            with self._scope():
+            new_vars = []
+            if handler.name:
+                new_vars = [handler.name]
+
+            with self._scope(extra_vars=new_vars):
                 self.visit(handler)
 
         # the 'try' block

@@ -70,19 +70,19 @@ The package implements the following rules:
 
 | Control Flow      | Scope of variables defined inside block                    |
 |-------------------|------------------------------------------------------------|
-| If/Elif/Else      | block only                                                 |
+| If/Elif/Else      | block only, unless assigned in all branches                |
 | For loop          | block only                                                 |
 | While Loop        | block only                                                 |
 | Walrus assignment | block only if used in an if or a while                     | 
 | `with block_scope()` | block only |
-| Other With statements | variables outlive their block                              |
+| Other `with` statements | variables outlive their block                              |
 | Try/Else/Finally     | Try/Else/Finally: outlive their block but can't be used in Except |
 | Except               | block only                                                 |
 | Case (Python >= 3.10) | block only                                                |
 
 This applies to:
-- all symbols, including function names.
-- all attributes of `self`,
+- all variables,
+- all attributes of `self`.
 
 Specifically, you are only allowed to use an attribute of `self` if the attribute is defined in the constructor.
 
@@ -93,7 +93,7 @@ This is why the special object `block_scope` was added.
 ```python3
 with block_scope():
     x = 3
-print(x)  # check_block_scoping counts this as an error
+print(x)  # this package counts this as an error
 ```
 
 ## Known Issues
