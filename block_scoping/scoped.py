@@ -5,6 +5,12 @@ import re
 import textwrap
 from contextlib import contextmanager
 
+
+support_ann_assign = hasattr(ast, 'AnnAssign')
+support_constant = hasattr(ast, 'Constant')
+support_named_expr = hasattr(ast, 'NamedExpr')
+support_match = hasattr(ast, 'Match')
+
 @contextmanager
 def block_scope():
     yield
@@ -165,6 +171,11 @@ class ScopeChecker(ast.NodeVisitor):
                 #     )
 
         self.generic_visit(node)
+
+    def visit_AnnAssign(self, node):
+        current_scope = self._scopes[-1]
+        for new_var in _extract_assign_vars(node.target):
+            current_scope.add(new_var)
 
     def visit_AugAssign(self, node):
         for v in _extract_assign_vars(node.target):
@@ -385,16 +396,17 @@ def _extract_self_assignments(class_ast: ast.ClassDef) -> list:
             # Handle Assign nodes (e.g., self.foo = bar)
             if isinstance(node, ast.Assign):
                 for target in node.targets:
-                    vars_assigned = _extract_assign_vars(target)
-                    for var in vars_assigned:
+                    for var in _extract_assign_vars(target):
                         if var.startswith("self."):
                             assignments.append(var)
-
+            elif support_ann_assign and isinstance(node, ast.AnnAssign):
+                for var in _extract_assign_vars(node.target):
+                    if var.startswith("self."):
+                        assignments.append(var)
             # Handle NamedExpr nodes (e.g., self.foo := compute_value())
-            elif isinstance(node, ast.NamedExpr):
+            elif support_named_expr and isinstance(node, ast.NamedExpr):
                 if isinstance(node.target, ast.Attribute):
-                    vars_assigned = _extract_assign_vars(node.target)
-                    for var in vars_assigned:
+                    for var in _extract_assign_vars(node.target):
                         if var.startswith("self."):
                             assignments.append(var)
 
@@ -454,6 +466,9 @@ def _check_class(class_ast, scope_vars: list, filename:str=None) -> list:
             for target in item.targets:
                 if isinstance(target, ast.Name):
                     class_level_vars.append(target.id)
+        elif support_ann_assign and isinstance(item, ast.AnnAssign):
+            if isinstance(item.target, ast.Name):
+                class_level_vars.append(item.target.id)
         elif isinstance(item, ast.FunctionDef):
             method_nodes[item.name] = item
 

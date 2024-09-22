@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import dataclass
 from block_scoping import block_scoping, BlockScopingException
 
 class TestBlockScoping(unittest.TestCase):
@@ -60,6 +61,14 @@ class TestBlockScoping(unittest.TestCase):
         def f():
             c = (result := 4)
             print(result)
+
+    def test_dataclass(self):
+        @block_scoping
+        @dataclass
+        class A:
+            v1: int
+            def method(self):
+                print(self.v1)
 
 
 if __name__ == '__main__':

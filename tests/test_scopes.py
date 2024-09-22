@@ -689,8 +689,8 @@ class TestBlockScoping(unittest.TestCase):
         @block_scoping
         class A:
             v1 = 3
-            def method(self):
-                print(v1)
+            def __init__(self):
+                print(self.v1)
 
     def test_class_var2(self):
         @block_scoping
@@ -698,7 +698,6 @@ class TestBlockScoping(unittest.TestCase):
             v1 = 3
             def method(self):
                 print(self.v1)
-
 
     def test_init_subclass(self):
         @block_scoping
@@ -721,8 +720,6 @@ class TestBlockScoping(unittest.TestCase):
             def method(self):
                 print(self.x)
 
-
-    #TODO: test inheritance from match/case
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
