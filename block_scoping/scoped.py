@@ -372,6 +372,64 @@ class ScopeChecker(ast.NodeVisitor):
         visitor.visit(node)
         self._scopes[-1].update(visitor.imports)
 
+def _extract_self_assignments(class_ast: ast.ClassDef) -> list:
+    assignments = []
+
+    methods = [
+        item for item in class_ast.body
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+
+    for method in methods:
+        for node in ast.walk(method):
+            # Handle Assign nodes (e.g., self.foo = bar)
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    vars_assigned = _extract_assign_vars(target)
+                    for var in vars_assigned:
+                        if var.startswith("self."):
+                            assignments.append(var)
+
+            # Handle NamedExpr nodes (e.g., self.foo := compute_value())
+            elif isinstance(node, ast.NamedExpr):
+                if isinstance(node.target, ast.Attribute):
+                    vars_assigned = _extract_assign_vars(node.target)
+                    for var in vars_assigned:
+                        if var.startswith("self."):
+                            assignments.append(var)
+
+    return assignments
+
+def _init_calls_any_method(class_ast: ast.ClassDef) -> bool:
+    """
+    Check whether the __init__ method of the class calls any other method of the class.
+    """
+    method_names = {
+        item.name for item in class_ast.body
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+    # Find the __init__ method
+    init_method = next(
+        (item for item in class_ast.body
+         if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "__init__"),
+        None
+    )
+
+    if init_method is None:
+        return False
+
+    for node in ast.walk(init_method):
+        if isinstance(node, ast.Call):
+            # Check if the call is an attribute access (e.g., self.method())
+            if isinstance(node.func, ast.Attribute):
+                # Check if the attribute is accessed via 'self'
+                if isinstance(node.func.value, ast.Name) and node.func.value.id == "self":
+                    method_called = node.func.attr
+                    if method_called in method_names:
+                        return True
+
+    return False
 
 def _check_func(func_ast, scope_vars: list, attr_check: bool, obj_attrs=[], filename:str=None) -> tuple:
     checker = ScopeChecker(
@@ -411,6 +469,11 @@ def _check_class(class_ast, scope_vars: list, filename:str=None) -> list:
         vars_in_scope, errors = _check_func(init_method, scope_vars, attr_check=False, filename=filename)
         obj_attrs = [attr for attr in vars_in_scope if attr.startswith("self.")]
         all_errors += errors
+
+    # if __init__ calls method, they could be initializing self. attributes, which is too complicated to track.
+    # So, in this situation, we add all 'self.x = ' assignments to the object attributes
+    if not is_sub_class and _init_calls_any_method(class_ast):
+        obj_attrs += _extract_self_assignments(class_ast)  
 
     # check the other methods
     for method_name, method_ast in method_nodes.items():

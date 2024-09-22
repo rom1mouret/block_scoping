@@ -685,6 +685,43 @@ class TestBlockScoping(unittest.TestCase):
                 for _ in range(5):
                     pass
 
+    def test_class_var1(self):
+        @block_scoping
+        class A:
+            v1 = 3
+            def method(self):
+                print(v1)
+
+    def test_class_var2(self):
+        @block_scoping
+        class A:
+            v1 = 3
+            def method(self):
+                print(self.v1)
+
+
+    def test_init_subclass(self):
+        @block_scoping
+        class A:
+            def __init__(self):
+                if True:
+                    self._init_vars()
+                else:
+                    self._init_vars()
+
+            def _init_vars(self):
+                if True:
+                    self._deep()
+                else:
+                    self._deep()
+
+            def _deep(self):
+                self.x = 3
+
+            def method(self):
+                print(self.x)
+
+
     #TODO: test inheritance from match/case
 
 if __name__ == '__main__':

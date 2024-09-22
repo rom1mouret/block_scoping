@@ -28,7 +28,8 @@ def check_file(file_path) -> list:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             vars.append(node.name)
         elif isinstance(node, ast.Assign):
-            vars += _extract_assign_vars(node)
+            for target in node.targets:
+                vars += _extract_assign_vars(target)
 
     # check classes and function
     all_errors = []

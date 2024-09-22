@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="block_scoping",
-    version="0.2.0",
+    version="0.2.1",
     author="Romain Mouret",
     author_email="rom1mouret@gmail.com",
     description="A simple package for block scoping",
