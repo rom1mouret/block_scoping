@@ -699,6 +699,18 @@ class TestBlockScoping(unittest.TestCase):
             def method(self):
                 print(self.v1)
 
+    def test_class_var3(self):
+        @block_scoping
+        class A:
+            v1 = 3
+
+            def __init__(self):
+                pass
+
+            def method(self):
+                print(self.v1)
+
+
     def test_init_subclass(self):
         @block_scoping
         class A:

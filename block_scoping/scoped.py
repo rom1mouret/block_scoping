@@ -482,7 +482,7 @@ def _check_class(class_ast, scope_vars: list, filename:str=None) -> list:
     obj_attrs = [f"self.{v}" for v in class_level_vars]  # class vars can be accessed with self
     if init_method is not None:
         vars_in_scope, errors = _check_func(init_method, scope_vars, attr_check=False, filename=filename)
-        obj_attrs = [attr for attr in vars_in_scope if attr.startswith("self.")]
+        obj_attrs += [attr for attr in vars_in_scope if attr.startswith("self.")]
         all_errors += errors
 
     # if __init__ calls method, they could be initializing self. attributes, which is too complicated to track.
