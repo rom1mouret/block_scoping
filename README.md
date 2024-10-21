@@ -1,6 +1,6 @@
 # Block Scoping
 
-This is simple [PyPi package](https://pypi.org/project/block-scoping/) running static analysis to detect scoping issues caused by Python's lack of block scoping.
+This is a simple [PyPi package](https://pypi.org/project/block-scoping/) running static analysis to detect scoping issues caused by Python's lack of block scoping.
 
 Python's scoping is a common source of bugs.
 
